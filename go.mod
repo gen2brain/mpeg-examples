@@ -3,7 +3,7 @@ module examples
 go 1.19
 
 require (
-	github.com/gen2brain/mpeg v0.2.1
+	github.com/gen2brain/mpeg v0.2.2
 	github.com/gen2brain/raylib-go/raylib v0.0.0-20221023125634-dfbb5ab75453
 	github.com/gowebapi/webapi v0.0.0-20220111190827-0cb1f8ede1ac
 	github.com/hajimehoshi/ebiten/v2 v2.4.8
