@@ -23,8 +23,9 @@ github.com/hajimehoshi/oto v0.6.1/go.mod h1:0QXGEkbuJRohbJaxr7ZQSxnju7hEhseiPx2h
 github.com/hajimehoshi/oto/v2 v2.3.1 h1:qrLKpNus2UfD674oxckKjNJmesp9hMh7u7QCrStB3Rc=
 github.com/hajimehoshi/oto/v2 v2.3.1/go.mod h1:seWLbgHH7AyUMYKfKYT9pg7PhUu9/SisyJvNTT+ASQo=
 github.com/jakecoffman/cp v1.2.1/go.mod h1:JjY/Fp6d8E1CHnu74gWNnU0+b9VzEdUVPoJxg2PsTQg=
-github.com/jezek/xgb v1.0.1 h1:YUGhxps0aR7J2Xplbs23OHnV1mWaxFVcOl9b+1RQkt8=
 github.com/jezek/xgb v1.0.1/go.mod h1:nrhwO0FX/enq75I7Y7G8iN1ubpSGZEiA3v9e9GyRFlk=
+github.com/jezek/xgb v1.1.0 h1:wnpxJzP1+rkbGclEkmwpVFQWpuE2PUGNUzP8SbfFobk=
+github.com/jezek/xgb v1.1.0/go.mod h1:nrhwO0FX/enq75I7Y7G8iN1ubpSGZEiA3v9e9GyRFlk=
 github.com/jezek/xgbutil v0.0.0-20210302171758-530099784e66 h1:+wPhoJD8EH0/bXipIq8Lc2z477jfox9zkXPCJdhvHj8=
 github.com/jezek/xgbutil v0.0.0-20210302171758-530099784e66/go.mod h1:KACeV+k6b+aoLTVrrurywEbu3UpqoQcQywj4qX8aQKM=
 github.com/jfbus/httprs v0.0.0-20190827093123-b0af8319bb15 h1:HPqgCwRiChGXITjjipDuTJYVPkAUpM4lp0mfo7ONpjo=

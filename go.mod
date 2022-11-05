@@ -8,7 +8,7 @@ require (
 	github.com/gen2brain/shm v0.0.0-20221026125803-c33c9e32b1c8
 	github.com/gowebapi/webapi v0.0.0-20220111190827-0cb1f8ede1ac
 	github.com/hajimehoshi/ebiten/v2 v2.4.8
-	github.com/jezek/xgb v1.0.1
+	github.com/jezek/xgb v1.1.0
 	github.com/jezek/xgbutil v0.0.0-20210302171758-530099784e66
 	github.com/jfbus/httprs v0.0.0-20190827093123-b0af8319bb15
 	github.com/veandco/go-sdl2 v0.4.25
