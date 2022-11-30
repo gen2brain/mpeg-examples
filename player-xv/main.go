@@ -20,9 +20,9 @@ import (
 	"github.com/jezek/xgbutil/ewmh"
 	"github.com/jezek/xgbutil/icccm"
 
+	"github.com/gen2brain/oss"
 	"github.com/gen2brain/shm"
 	"github.com/jfbus/httprs"
-	"github.com/yobert/alsa"
 
 	"github.com/gen2brain/mpeg"
 )
@@ -73,8 +73,7 @@ type app struct {
 	window xproto.Window
 	screen *xproto.ScreenInfo
 
-	cards  []*alsa.Card
-	device *alsa.Device
+	device *oss.Audio
 }
 
 func newApp(m *mpeg.MPEG) (*app, error) {
@@ -210,10 +209,40 @@ func newApp(m *mpeg.MPEG) (*app, error) {
 	}
 
 	if hasAudio {
-		err = a.initAudio()
+		dev, err := oss.OpenAudio()
 		if err != nil {
 			log.Fatal(err)
 		}
+
+		a.device = dev
+
+		err = dev.SetBufferSize(mpeg.SamplesPerFrame, 2)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		channels, err := dev.Channels(2)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		samplerate, err := dev.Samplerate(a.samplerate)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		format, err := dev.Format(oss.AfmtS16Le)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		bufferSize, err := dev.BufferSize()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Printf("OSS: %d channels, %d hz, %v, buffer size %d",
+			channels, samplerate, format, bufferSize)
 
 		a.mpg.SetAudioFormat(mpeg.AudioS16)
 
@@ -225,7 +254,7 @@ func newApp(m *mpeg.MPEG) (*app, error) {
 				return
 			}
 
-			err = a.device.Write(samples.Bytes(), mpeg.SamplesPerFrame)
+			_, err = dev.Write(samples.Bytes())
 			if err != nil {
 				log.Println(err)
 			}
@@ -332,7 +361,6 @@ func (a *app) destroy() {
 
 	if a.device != nil {
 		a.device.Close()
-		alsa.CloseCards(a.cards)
 	}
 }
 
@@ -498,66 +526,6 @@ func (a *app) queryAdaptors() error {
 	} else {
 		log.Printf("XVideo: %s, port %d, id: 0x%x (%s)", xvName, a.xvPort, a.formatID, a.formatName)
 	}
-
-	return nil
-}
-
-func (a *app) initAudio() error {
-	var err error
-
-	a.cards, err = alsa.OpenCards()
-	if err != nil {
-		return err
-	}
-
-	devices, err := a.cards[0].Devices()
-	if err != nil {
-		return err
-	}
-
-	for _, dev := range devices {
-		if dev.Type == alsa.PCM && dev.Play {
-			a.device = dev
-			break
-		}
-	}
-
-	if err = a.device.Open(); err != nil {
-		return err
-	}
-
-	channels, err := a.device.NegotiateChannels(2)
-	if err != nil {
-		return err
-	}
-
-	rate, err := a.device.NegotiateRate(a.samplerate)
-	if err != nil {
-		return err
-	}
-
-	format, err := a.device.NegotiateFormat(alsa.S16_LE)
-	if err != nil {
-		return err
-	}
-
-	periodSize, err := a.device.NegotiatePeriodSize(mpeg.SamplesPerFrame)
-	if err != nil {
-		return err
-	}
-
-	bufferSize, err := a.device.NegotiateBufferSize(mpeg.SamplesPerFrame * 2)
-	if err != nil {
-		return err
-	}
-
-	err = a.device.Prepare()
-	if err != nil {
-		return err
-	}
-
-	log.Printf("ALSA: %d channels, %d hz, %v, period size %d, buffer size %d",
-		channels, rate, format, periodSize, bufferSize)
 
 	return nil
 }
