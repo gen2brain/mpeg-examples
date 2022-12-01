@@ -3,6 +3,8 @@ github.com/ebitengine/purego v0.0.0-20220905075623-aeed57cda744 h1:A8UnJ/5OKzki4
 github.com/ebitengine/purego v0.0.0-20220905075623-aeed57cda744/go.mod h1:Eh8I3yvknDYZeCuXH9kRNaPuHEwvXDCk378o9xszmHg=
 github.com/gen2brain/mpeg v0.2.2 h1:9VhRzbbTShC54H6LGl3r+K+zZHSfL7lauyYhlj090nw=
 github.com/gen2brain/mpeg v0.2.2/go.mod h1:i/ebyRRv/IoHixuZ9bElZnXbmfoUVPGQpdsJ4sVuX38=
+github.com/gen2brain/oss v0.0.0-20221130175816-4194e0b487a4 h1:VH0CbMY30IPWbZy/qyhL3DGbR6gA/txJ5TsKEeNfcjU=
+github.com/gen2brain/oss v0.0.0-20221130175816-4194e0b487a4/go.mod h1:XgP5DFUvY4LNvdV1vTUwIMV4tQRgwq4loA9RsYZio7I=
 github.com/gen2brain/raylib-go/raylib v0.0.0-20221023125634-dfbb5ab75453 h1:DUUHWiodnUG1g2WCgHygGy5X+27hBkBhGxuimp+UzwM=
 github.com/gen2brain/raylib-go/raylib v0.0.0-20221023125634-dfbb5ab75453/go.mod h1:+NbsqGlEQqGqrsgJFF5Yj2dkvn0ML2SQb8RqM2hJsPU=
 github.com/gen2brain/shm v0.0.0-20221026125803-c33c9e32b1c8 h1:u4/UVF0sNxlqDwCptjIUTUkZW4UoZDrcHzvd2kNnF/k=
@@ -45,8 +47,6 @@ github.com/smartystreets/goconvey v0.0.0-20190731233626-505e41936337 h1:WN9BUFbd
 github.com/smartystreets/goconvey v0.0.0-20190731233626-505e41936337/go.mod h1:syvi0/a8iFYH4r/RixwvyeAJjdLS9QV7WQ/tjFTllLA=
 github.com/veandco/go-sdl2 v0.4.25 h1:J5ac3KKOccp/0xGJA1PaNYKPUcZm19IxhDGs8lJofPI=
 github.com/veandco/go-sdl2 v0.4.25/go.mod h1:OROqMhHD43nT4/i9crJukyVecjPNYYuCofep6SNiAjY=
-github.com/yobert/alsa v0.0.0-20200618200352-d079056f5370 h1:I8PHpJWTMTJZVDoosy8aXslFGe7wvcUbol7fOrVy4Tc=
-github.com/yobert/alsa v0.0.0-20200618200352-d079056f5370/go.mod h1:CaowXBWOiSGWEpBBV8LoVnQTVPV4ycyviC9IBLj8dRw=
 github.com/yuin/goldmark v1.4.0/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=

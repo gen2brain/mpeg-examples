@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/gen2brain/mpeg v0.2.2
+	github.com/gen2brain/oss v0.0.0-20221130175816-4194e0b487a4
 	github.com/gen2brain/raylib-go/raylib v0.0.0-20221023125634-dfbb5ab75453
 	github.com/gen2brain/shm v0.0.0-20221026125803-c33c9e32b1c8
 	github.com/gowebapi/webapi v0.0.0-20220111190827-0cb1f8ede1ac
@@ -12,7 +13,6 @@ require (
 	github.com/jezek/xgbutil v0.0.0-20210302171758-530099784e66
 	github.com/jfbus/httprs v0.0.0-20190827093123-b0af8319bb15
 	github.com/veandco/go-sdl2 v0.4.25
-	github.com/yobert/alsa v0.0.0-20200618200352-d079056f5370
 )
 
 require (
