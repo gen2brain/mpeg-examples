@@ -27,11 +27,11 @@ import (
 	"github.com/gen2brain/mpeg"
 )
 
-const (
+var (
 	// I420 Intel Indeo 4
-	fourccI420 = 0x30323449
+	I420 = fourcc("I420")
 	// YV12 YUV420P
-	fourccYV12 = 0x32315659
+	YV12 = fourcc("YV12")
 )
 
 type app struct {
@@ -63,6 +63,11 @@ type app struct {
 	lumaSize   int
 	chromaSize int
 	frameSize  int
+
+	yi  int
+	cbi int
+	cri int
+
 	formatID   uint32
 	formatName string
 
@@ -174,6 +179,14 @@ func newApp(m *mpeg.MPEG) (*app, error) {
 	}
 	xproto.CreateGC(a.x, a.gc, xproto.Drawable(a.window), 0, nil)
 
+	if a.useXv {
+		atom := "XV_SYNC_TO_VBLANK"
+		reply, err := xproto.InternAtom(a.x, true, uint16(len(atom)), atom).Reply()
+		if err == nil {
+			xv.SetPortAttribute(a.x, a.xvPort, reply.Atom, 1)
+		}
+	}
+
 	if hasVideo {
 		a.mpg.SetVideoCallback(func(m *mpeg.MPEG, frame *mpeg.Frame) {
 			if frame == nil || !a.visible {
@@ -181,13 +194,13 @@ func newApp(m *mpeg.MPEG) (*app, error) {
 			}
 
 			if a.useXv {
-				copy(a.data[:a.lumaSize], frame.Y.Data)
-				if a.formatID == fourccI420 {
-					copy(a.data[a.lumaSize:a.lumaSize+a.chromaSize], frame.Cb.Data)
-					copy(a.data[a.lumaSize+a.chromaSize:a.frameSize], frame.Cr.Data)
-				} else if a.formatID == fourccYV12 {
-					copy(a.data[a.lumaSize:a.lumaSize+a.chromaSize], frame.Cr.Data)
-					copy(a.data[a.lumaSize+a.chromaSize:a.frameSize], frame.Cb.Data)
+				copy(a.data[:a.yi], frame.Y.Data)
+				if a.formatID == I420 {
+					copy(a.data[a.yi:a.cbi], frame.Cb.Data)
+					copy(a.data[a.cbi:a.cri], frame.Cr.Data)
+				} else if a.formatID == YV12 {
+					copy(a.data[a.cbi:a.cri], frame.Cr.Data)
+					copy(a.data[a.yi:a.cbi], frame.Cb.Data)
 				}
 			} else {
 				src := frame.YCbCr()
@@ -213,7 +226,6 @@ func newApp(m *mpeg.MPEG) (*app, error) {
 		if err != nil {
 			log.Fatal(err)
 		}
-
 		a.device = dev
 
 		err = dev.SetBufferSize(mpeg.SamplesPerFrame, 2)
@@ -275,7 +287,7 @@ func newApp(m *mpeg.MPEG) (*app, error) {
 				log.Printf("Error: %s\n", err)
 			}
 			if ev != nil {
-				log.Printf("Event: %v\n", ev)
+				//log.Printf("Event: %v\n", ev)
 			}
 
 			a.processEvent(ev)
@@ -330,8 +342,8 @@ func (a *app) run() {
 			lastTime = currentTime
 
 			if a.seekTo != -1 {
-				a.seekTo = -1
 				a.mpg.Seek(time.Duration(a.seekTo*float64(time.Second)), false)
+				a.seekTo = -1
 			} else {
 				a.mpg.Decode(time.Duration(elapsedTime * float64(time.Second)))
 			}
@@ -379,8 +391,11 @@ func (a *app) createImage() error {
 
 		a.lumaSize = lumaWidth * lumaHeight
 		a.chromaSize = chromaWidth * chromaHeight
-
 		a.frameSize = a.lumaSize + 2*a.chromaSize
+
+		a.yi = a.width * a.height
+		a.cbi = a.yi + a.width*a.height/4
+		a.cri = a.cbi + a.width*a.height/4
 	}
 
 	a.shmId, err = shm.Get(shm.IPC_PRIVATE, a.frameSize, shm.IPC_CREAT|0666)
@@ -444,6 +459,8 @@ func (a *app) putImage() {
 			log.Println(err)
 		}
 	}
+
+	a.x.Sync()
 }
 
 func (a *app) queryAdaptors() error {
@@ -468,9 +485,9 @@ func (a *app) queryAdaptors() error {
 		}
 
 		for _, format := range r.Format {
-			if format.Id == fourccI420 {
+			if format.Id == I420 {
 				haveI420 = true
-			} else if format.Id == fourccYV12 {
+			} else if format.Id == YV12 {
 				haveYV12 = true
 			}
 		}
@@ -480,10 +497,10 @@ func (a *app) queryAdaptors() error {
 		}
 
 		if haveI420 {
-			a.formatID = fourccI420
+			a.formatID = I420
 			a.formatName = "I420"
 		} else if haveYV12 {
-			a.formatID = fourccYV12
+			a.formatID = YV12
 			a.formatName = "YV12"
 		}
 
@@ -575,4 +592,8 @@ func openFile(arg string) (io.ReadSeekCloser, error) {
 	}
 
 	return r, nil
+}
+
+func fourcc(b string) uint32 {
+	return uint32(b[0]) | (uint32(b[1]) << 8) | (uint32(b[2]) << 16) | (uint32(b[3]) << 24)
 }
