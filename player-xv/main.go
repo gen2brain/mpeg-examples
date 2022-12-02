@@ -459,8 +459,6 @@ func (a *app) putImage() {
 			log.Println(err)
 		}
 	}
-
-	a.x.Sync()
 }
 
 func (a *app) queryAdaptors() error {
