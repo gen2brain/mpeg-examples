@@ -199,8 +199,8 @@ func newApp(m *mpeg.MPEG) (*app, error) {
 					copy(a.data[a.yi:a.cbi], frame.Cb.Data)
 					copy(a.data[a.cbi:a.cri], frame.Cr.Data)
 				} else if a.formatID == YV12 {
-					copy(a.data[a.cbi:a.cri], frame.Cr.Data)
-					copy(a.data[a.yi:a.cbi], frame.Cb.Data)
+					copy(a.data[a.yi:a.cbi], frame.Cr.Data)
+					copy(a.data[a.cbi:a.cri], frame.Cb.Data)
 				}
 			} else {
 				src := frame.YCbCr()
