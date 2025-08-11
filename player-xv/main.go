@@ -32,6 +32,8 @@ var (
 	I420 = fourcc("I420")
 	// YV12 YUV420P
 	YV12 = fourcc("YV12")
+	// NV12 NV12
+	NV12 = fourcc("NV12")
 )
 
 type app struct {
@@ -199,6 +201,9 @@ func newApp(m *mpeg.MPEG) (*app, error) {
 					copy(a.data[a.yi:a.cbi], frame.Cb.Data)
 					copy(a.data[a.cbi:a.cri], frame.Cr.Data)
 				} else if a.formatID == YV12 {
+					copy(a.data[a.yi:a.cbi], frame.Cr.Data)
+					copy(a.data[a.cbi:a.cri], frame.Cb.Data)
+				} else if a.formatID == NV12 {
 					copy(a.data[a.yi:a.cbi], frame.Cr.Data)
 					copy(a.data[a.cbi:a.cri], frame.Cb.Data)
 				}
@@ -463,7 +468,7 @@ func (a *app) putImage() {
 
 func (a *app) queryAdaptors() error {
 	var xvName string
-	var gotPort, haveI420, haveYV12 bool
+	var gotPort, haveI420, haveYV12, haveNV12 bool
 
 	reply, err := xv.QueryAdaptors(a.x, a.screen.Root).Reply()
 	if err != nil {
@@ -487,10 +492,12 @@ func (a *app) queryAdaptors() error {
 				haveI420 = true
 			} else if format.Id == YV12 {
 				haveYV12 = true
+			} else if format.Id == NV12 {
+				haveNV12 = true
 			}
 		}
 
-		if !haveI420 && !haveYV12 {
+		if !haveI420 && !haveYV12 && !haveNV12 {
 			continue
 		}
 
@@ -500,6 +507,9 @@ func (a *app) queryAdaptors() error {
 		} else if haveYV12 {
 			a.formatID = YV12
 			a.formatName = "YV12"
+		} else if haveNV12 {
+			a.formatID = NV12
+			a.formatName = "NV12"
 		}
 
 		for p := 0; p < int(info.NumPorts); p++ {
@@ -528,7 +538,7 @@ func (a *app) queryAdaptors() error {
 	if reply.NumAdaptors == 0 {
 		log.Println("Error: no Xv adaptor found")
 		a.useXv = false
-	} else if !haveI420 && !haveYV12 {
+	} else if !haveI420 && !haveYV12 && !haveNV12 {
 		log.Println("Error: no supported format found")
 		a.useXv = false
 	} else if !gotPort {
