@@ -53,16 +53,18 @@ func main() {
 	defer rl.CloseWindow()
 
 	if hasAudio {
-		rl.SetAudioStreamBufferSizeDefault(mpeg.SamplesPerFrame * 2)
+		mpg.SetAudioFormat(mpeg.AudioF32N)
 
 		rl.InitAudioDevice()
 		defer rl.CloseAudioDevice()
+
+		rl.SetAudioStreamBufferSizeDefault(mpeg.SamplesPerFrame * 2)
 
 		stream = rl.LoadAudioStream(uint32(samplerate), 32, 2)
 		defer rl.UnloadAudioStream(stream)
 		rl.PlayAudioStream(stream)
 
-		duration := float64(mpeg.SamplesPerFrame) / float64(samplerate)
+		duration := float64(mpeg.SamplesPerFrame*2) / float64(samplerate)
 		mpg.SetAudioLeadTime(time.Duration(duration * float64(time.Second)))
 
 		mpg.SetAudioCallback(func(m *mpeg.MPEG, samples *mpeg.Samples) {
@@ -71,7 +73,7 @@ func main() {
 			}
 
 			if rl.IsAudioStreamProcessed(stream) {
-				rl.UpdateAudioStream(stream, samples.Interleaved, int32(len(samples.Interleaved)))
+				rl.UpdateAudioStream(stream, samples.Interleaved)
 			}
 		})
 	}
@@ -95,7 +97,7 @@ func main() {
 				return
 			}
 
-			rl.UpdateTexture(texture, frame.Pixels())
+			rl.UpdateTexture(texture, frame.RGBA())
 		})
 	}
 
@@ -111,11 +113,20 @@ func main() {
 			running = false
 		} else if rl.IsKeyPressed(rl.KeySpace) || rl.IsKeyPressed(rl.KeyP) {
 			pause = !pause
-		} else if rl.IsKeyPressed(rl.KeyF) || rl.IsKeyPressed(rl.KeyF11) {
-			if !fullscreen {
-				winPos = rl.GetWindowPosition()
+			if hasAudio {
+				if pause {
+					rl.PauseAudioStream(stream)
+				} else {
+					rl.ResumeAudioStream(stream)
+				}
 			}
-			fullscreen = toggleFullscreen(fullscreen, winPos, width, height)
+		} else if rl.IsKeyPressed(rl.KeyF) || rl.IsKeyPressed(rl.KeyF11) {
+			if hasVideo {
+				if !fullscreen {
+					winPos = rl.GetWindowPosition()
+				}
+				fullscreen = toggleFullscreen(fullscreen, winPos, width, height)
+			}
 		} else if rl.IsKeyPressed(rl.KeyRight) {
 			seekTo = mpg.Time().Seconds() + 3
 		} else if rl.IsKeyPressed(rl.KeyLeft) {
