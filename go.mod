@@ -2,12 +2,10 @@ module examples
 
 go 1.23.0
 
-toolchain go1.24.4
-
 require (
 	github.com/Zyko0/go-sdl3 v0.0.0-20250807182125-b3e4fe4def2c
+	github.com/gen2brain/alsa v0.5.0
 	github.com/gen2brain/mpeg v0.5.0
-	github.com/gen2brain/oss v0.2.1
 	github.com/gen2brain/raylib-go/raylib v0.56.0-dev
 	github.com/gen2brain/shm v0.1.1
 	github.com/gowebapi/webapi v0.0.0-20221221115732-41cedfc27a0b

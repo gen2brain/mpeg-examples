@@ -20,7 +20,7 @@ import (
 	"github.com/jezek/xgbutil/ewmh"
 	"github.com/jezek/xgbutil/icccm"
 
-	"github.com/gen2brain/oss"
+	"github.com/gen2brain/alsa"
 	"github.com/gen2brain/shm"
 	"github.com/jfbus/httprs"
 
@@ -80,7 +80,7 @@ type app struct {
 	window xproto.Window
 	screen *xproto.ScreenInfo
 
-	device *oss.Audio
+	pcm *alsa.PCM
 }
 
 func newApp(m *mpeg.MPEG) (*app, error) {
@@ -227,39 +227,23 @@ func newApp(m *mpeg.MPEG) (*app, error) {
 	}
 
 	if hasAudio {
-		dev, err := oss.OpenAudio()
-		if err != nil {
-			log.Fatal(err)
-		}
-		a.device = dev
-
-		err = dev.SetBufferSize(mpeg.SamplesPerFrame, 2)
-		if err != nil {
-			log.Fatal(err)
+		// mpeg always outputs 2 interleaved channels of S16 samples.
+		config := &alsa.Config{
+			Channels:    2,
+			Rate:        uint32(a.samplerate),
+			PeriodSize:  1024,
+			PeriodCount: 4,
+			Format:      alsa.SNDRV_PCM_FORMAT_S16_LE,
 		}
 
-		channels, err := dev.Channels(2)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		samplerate, err := dev.Samplerate(a.samplerate)
+		a.pcm, err = alsa.PcmOpen(0, 0, alsa.PCM_OUT, config)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		format, err := dev.Format(oss.AfmtS16Le)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		bufferSize, err := dev.BufferSize()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		log.Printf("OSS: %d channels, %d hz, %v, buffer size %d",
-			channels, samplerate, format, bufferSize)
+		c := a.pcm.Config()
+		log.Printf("ALSA: %d channels, %d hz, %s, period size %d, period count %d",
+			c.Channels, c.Rate, alsa.PcmParamFormatNames[c.Format], c.PeriodSize, c.PeriodCount)
 
 		a.mpg.SetAudioFormat(mpeg.AudioS16)
 
@@ -271,8 +255,7 @@ func newApp(m *mpeg.MPEG) (*app, error) {
 				return
 			}
 
-			_, err = dev.Write(samples.Bytes())
-			if err != nil {
+			if _, err := a.pcm.Write(samples.S16); err != nil {
 				log.Println(err)
 			}
 		})
@@ -376,8 +359,9 @@ func (a *app) destroy() {
 	xproto.DestroyWindow(a.x, a.window)
 	a.x.Close()
 
-	if a.device != nil {
-		a.device.Close()
+	if a.pcm != nil {
+		a.pcm.Drain()
+		a.pcm.Close()
 	}
 }
 

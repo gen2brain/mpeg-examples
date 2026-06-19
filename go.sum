@@ -4,12 +4,14 @@ github.com/Zyko0/go-sdl3 v0.0.0-20250807182125-b3e4fe4def2c h1:m9kud++9nNK5aOanx
 github.com/Zyko0/go-sdl3 v0.0.0-20250807182125-b3e4fe4def2c/go.mod h1:a+48Psmm0D/PuXXB9CW0u9faFMxhNoWvZdfSXuKoD58=
 github.com/Zyko0/purego-gen v0.0.0-20250727121216-3bcd331a1e0c h1:3z1BdpfvUbaP7oXjPabl7STN7zz88S432hZJ8M095kI=
 github.com/Zyko0/purego-gen v0.0.0-20250727121216-3bcd331a1e0c/go.mod h1:xpUxPkAb7v0Ffn/NGp1XpD+tZly4dpSPI7DTAFT37es=
+github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
+github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/ebitengine/purego v0.9.0-alpha.10 h1:audsHbrB2mnadP/fVRdQRDc0lymjY7oWTNfzT59XICo=
 github.com/ebitengine/purego v0.9.0-alpha.10/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
+github.com/gen2brain/alsa v0.5.0 h1:5n4wpslg28Gr2iUL/lYYSQcn4ITvssF1sLmotoyLj5k=
+github.com/gen2brain/alsa v0.5.0/go.mod h1:7+LNiORvvXA+SP2qs4JNVFKwoadL5DDFMOb+e2mEgrY=
 github.com/gen2brain/mpeg v0.5.0 h1:YrY5F5ZQAJCF/ItDHSb0bF5fxwk5IDq/RjOnfFhWurs=
 github.com/gen2brain/mpeg v0.5.0/go.mod h1:N37OJKAg3YeMfVqscgraoU6kwusr4pvA8aJK9QWPGiQ=
-github.com/gen2brain/oss v0.2.1 h1:KVGrb3HCQQdE9Wa75xKPV4Um4O0RvsRmgMfmD3/P+7k=
-github.com/gen2brain/oss v0.2.1/go.mod h1:XgP5DFUvY4LNvdV1vTUwIMV4tQRgwq4loA9RsYZio7I=
 github.com/gen2brain/raylib-go/raylib v0.56.0-dev h1:oa6iiEl1caGgsWYEh5Rs4lDDy3cJW9wOYv0KVRJe5U4=
 github.com/gen2brain/raylib-go/raylib v0.56.0-dev/go.mod h1:BaY76bZk7nw1/kVOSQObPY1v1iwVE1KHAGMfvI6oK1Q=
 github.com/gen2brain/shm v0.1.1 h1:1cTVA5qcsUFixnDHl14TmRoxgfWEEZlTezpUj1vm5uQ=
@@ -31,10 +33,14 @@ github.com/mitchellh/copystructure v1.2.0 h1:vpKXTN4ewci03Vljg/q9QvCGUDttBOGBIa1
 github.com/mitchellh/copystructure v1.2.0/go.mod h1:qLl+cE2AmVv+CoeAwDPye/v+N2HKCj9FbZEVFJRxO9s=
 github.com/mitchellh/reflectwalk v1.0.2 h1:G2LzWKi524PWgd3mLHV8Y5k7s6XUvT0Gef6zxSIeXaQ=
 github.com/mitchellh/reflectwalk v1.0.2/go.mod h1:mSTlrgnPZtwu0c4WaC2kGObEpuNDbx0jmZXqmk4esnw=
+github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
+github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/smartystreets/assertions v1.2.0 h1:42S6lae5dvLc7BrLu/0ugRtcFVjoJNMC/N3yZFZkDFs=
 github.com/smartystreets/assertions v1.2.0/go.mod h1:tcbTF8ujkAEcZ8TElKY+i30BzYlVhC/LOxJk7iOWnoo=
 github.com/smartystreets/goconvey v1.7.2 h1:9RBaZCeXEQ3UselpuwUQHltGVXvdwm6cv1hgR6gDIPg=
 github.com/smartystreets/goconvey v1.7.2/go.mod h1:Vw0tHAZW6lzCRk3xgdin6fKYcG+G3Pg9vgXWeJpQFMM=
+github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
+github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/veandco/go-sdl2 v0.4.40 h1:fZv6wC3zz1Xt167P09gazawnpa0KY5LM7JAvKpX9d/U=
 github.com/veandco/go-sdl2 v0.4.40/go.mod h1:OROqMhHD43nT4/i9crJukyVecjPNYYuCofep6SNiAjY=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
@@ -74,3 +80,5 @@ golang.org/x/tools v0.0.0-20191119224855-298f0cb1881e/go.mod h1:b+2E5dAYhXwXZwtn
 golang.org/x/tools v0.1.12/go.mod h1:hNGJHUnrk76NpqgfD5Aqm5Crs+Hm0VOH/i9J2+nxYbc=
 golang.org/x/tools v0.5.0/go.mod h1:N+Kgy78s5I24c24dU8OfWNEotWjutIs8SnJvn5IDq+k=
 golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
