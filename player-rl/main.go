@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -14,6 +15,44 @@ import (
 
 	"github.com/gen2brain/mpeg"
 )
+
+// audioRing is a thread-safe FIFO of interleaved float32 samples. The mpeg
+// audio callback writes decoded samples from the decode goroutine; raylib's
+// audio thread drains them through the stream callback. This decouples decode
+// pacing from the device clock, the same way SDL's QueueAudio does.
+type audioRing struct {
+	mu  sync.Mutex
+	buf []float32
+}
+
+func (a *audioRing) write(s []float32) {
+	a.mu.Lock()
+	a.buf = append(a.buf, s...)
+	a.mu.Unlock()
+}
+
+func (a *audioRing) read(out []float32) {
+	a.mu.Lock()
+	n := copy(out, a.buf)
+	a.buf = a.buf[:copy(a.buf, a.buf[n:])]
+	a.mu.Unlock()
+	for i := n; i < len(out); i++ {
+		out[i] = 0
+	}
+}
+
+func (a *audioRing) clear() {
+	a.mu.Lock()
+	a.buf = a.buf[:0]
+	a.mu.Unlock()
+}
+
+// frameBuf is a CPU-side copy of one decoded video frame, handed from the
+// decode goroutine to the render (main) thread. The decoder reuses its own
+// RGBA buffer, so the pixels are copied out.
+type frameBuf struct {
+	rgba []byte
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -52,6 +91,8 @@ func main() {
 	rl.InitWindow(width, height, filepath.Base(os.Args[1]))
 	defer rl.CloseWindow()
 
+	ring := &audioRing{}
+
 	if hasAudio {
 		mpg.SetAudioFormat(mpeg.AudioF32N)
 
@@ -62,6 +103,10 @@ func main() {
 
 		stream = rl.LoadAudioStream(uint32(samplerate), 32, 2)
 		defer rl.UnloadAudioStream(stream)
+
+		rl.SetAudioStreamCallback(stream, func(data []float32, frames int) {
+			ring.read(data)
+		})
 		rl.PlayAudioStream(stream)
 
 		duration := float64(mpeg.SamplesPerFrame*2) / float64(samplerate)
@@ -72,11 +117,17 @@ func main() {
 				return
 			}
 
-			if rl.IsAudioStreamProcessed(stream) {
-				rl.UpdateAudioStream(stream, samples.Interleaved)
-			}
+			ring.write(samples.Interleaved)
 		})
 	}
+
+	// Decode-ahead pipeline: the decoder runs on its own goroutine and passes
+	// CPU frame copies to the main thread, which owns all raylib rendering. This
+	// overlaps decoding (and the YCbCr to RGBA conversion of) the next frame with
+	// uploading and presenting (the vsync wait of) the current one.
+	ready := make(chan *frameBuf, 1)
+	free := make(chan *frameBuf, 3)
+	quit := make(chan struct{})
 
 	if hasVideo {
 		imFrame := &rl.Image{}
@@ -92,29 +143,103 @@ func main() {
 		target = rl.LoadRenderTexture(width, height)
 		defer rl.UnloadRenderTexture(target)
 
+		for i := 0; i < cap(free); i++ {
+			free <- &frameBuf{}
+		}
+
 		mpg.SetVideoCallback(func(m *mpeg.MPEG, frame *mpeg.Frame) {
 			if frame == nil {
 				return
 			}
 
-			rl.UpdateTexture(texture, frame.RGBA())
+			var fb *frameBuf
+			select {
+			case fb = <-free:
+			case <-quit:
+				return
+			}
+
+			fb.rgba = append(fb.rgba[:0], frame.RGBA().Pix...)
+
+			select {
+			case ready <- fb:
+			case <-quit:
+			}
 		})
 	}
 
-	var pause, fullscreen bool
-	var seekTo, lastTime, currentTime, elapsedTime float64
-	var winPos rl.Vector2
+	// Playback control shared with the decode goroutine. Seeks are relative so
+	// the main thread never touches the decoder.
+	var mu sync.Mutex
+	pause := false
+	seekDelta := 0.0
+	ended := false
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		last := time.Now()
+		for {
+			select {
+			case <-quit:
+				return
+			default:
+			}
+
+			mu.Lock()
+			p := pause
+			s := seekDelta
+			seekDelta = 0
+			mu.Unlock()
+
+			if s != 0 {
+				if hasAudio {
+					ring.clear()
+				}
+				mpg.Seek(time.Duration((mpg.Time().Seconds()+s)*float64(time.Second)), false)
+				last = time.Now()
+				continue
+			}
+
+			if p {
+				last = time.Now()
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+
+			now := time.Now()
+			elapsed := now.Sub(last).Seconds()
+			last = now
+			if framerate > 0 && elapsed > 1.0/framerate {
+				elapsed = 1.0 / framerate
+			}
+
+			mpg.Decode(time.Duration(elapsed * float64(time.Second)))
+
+			if mpg.HasEnded() {
+				mu.Lock()
+				ended = true
+				mu.Unlock()
+				return
+			}
+
+			time.Sleep(time.Millisecond)
+		}
+	}()
 
 	running := true
 	for running {
-		seekTo = -1
-
 		if rl.IsKeyPressed(rl.KeyQ) || rl.WindowShouldClose() {
 			running = false
 		} else if rl.IsKeyPressed(rl.KeySpace) || rl.IsKeyPressed(rl.KeyP) {
+			mu.Lock()
 			pause = !pause
+			p := pause
+			mu.Unlock()
 			if hasAudio {
-				if pause {
+				if p {
 					rl.PauseAudioStream(stream)
 				} else {
 					rl.ResumeAudioStream(stream)
@@ -122,37 +247,27 @@ func main() {
 			}
 		} else if rl.IsKeyPressed(rl.KeyF) || rl.IsKeyPressed(rl.KeyF11) {
 			if hasVideo {
-				if !fullscreen {
-					winPos = rl.GetWindowPosition()
-				}
-				fullscreen = toggleFullscreen(fullscreen, winPos, width, height)
+				rl.ToggleBorderlessWindowed()
 			}
 		} else if rl.IsKeyPressed(rl.KeyRight) {
-			seekTo = mpg.Time().Seconds() + 3
+			mu.Lock()
+			seekDelta = 3
+			mu.Unlock()
 		} else if rl.IsKeyPressed(rl.KeyLeft) {
-			seekTo = mpg.Time().Seconds() - 3
-		}
-
-		if !pause {
-			currentTime = rl.GetTime()
-			elapsedTime = currentTime - lastTime
-			if elapsedTime > 1.0/framerate {
-				elapsedTime = 1.0 / framerate
-			}
-			lastTime = currentTime
-
-			if seekTo != -1 {
-				mpg.Seek(time.Duration(seekTo*float64(time.Second)), false)
-			} else {
-				mpg.Decode(time.Duration(elapsedTime * float64(time.Second)))
-			}
-		}
-
-		if mpg.HasEnded() {
-			running = false
+			mu.Lock()
+			seekDelta = -3
+			mu.Unlock()
 		}
 
 		if hasVideo {
+			// Upload the most recent decoded frame, if one is ready.
+			select {
+			case fb := <-ready:
+				rl.UpdateTexture(texture, fb.rgba)
+				free <- fb
+			default:
+			}
+
 			rl.BeginDrawing()
 			rl.ClearBackground(rl.White)
 
@@ -171,7 +286,17 @@ func main() {
 
 			rl.EndDrawing()
 		}
+
+		mu.Lock()
+		e := ended
+		mu.Unlock()
+		if e && len(ready) == 0 {
+			running = false
+		}
 	}
+
+	close(quit)
+	wg.Wait()
 }
 
 func openFile(arg string) (io.ReadSeekCloser, error) {
@@ -193,20 +318,4 @@ func openFile(arg string) (io.ReadSeekCloser, error) {
 	}
 
 	return r, nil
-}
-
-func toggleFullscreen(fullscreen bool, winPos rl.Vector2, w, h int32) bool {
-	if fullscreen {
-		rl.ClearWindowState(rl.FlagWindowUndecorated | rl.FlagWindowTopmost)
-		rl.SetWindowPosition(int(winPos.X), int(winPos.Y))
-		rl.SetWindowSize(int(w), int(h))
-		rl.ShowCursor()
-		return false
-	} else {
-		rl.SetWindowState(rl.FlagWindowUndecorated | rl.FlagWindowTopmost)
-		d := rl.GetCurrentMonitor()
-		rl.SetWindowSize(rl.GetMonitorWidth(d), rl.GetMonitorHeight(d))
-		rl.HideCursor()
-		return true
-	}
 }
