@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Zyko0/go-sdl3/sdl"
@@ -14,6 +15,14 @@ import (
 
 	"github.com/gen2brain/mpeg"
 )
+
+// frameBuf is a CPU-side copy of one decoded video frame, handed from the
+// decode goroutine to the render (main) thread. The decoder reuses its own
+// frame buffers, so the planes are copied out.
+type frameBuf struct {
+	y, cb, cr        []byte
+	yStride, cStride int
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -81,6 +90,10 @@ func main() {
 			fmt.Println(err)
 			os.Exit(1)
 		}
+		if len(devices) == 0 {
+			fmt.Println("no audio playback device")
+			os.Exit(1)
+		}
 
 		stream = devices[0].OpenAudioDeviceStream(&spec, 0)
 		defer stream.Destroy()
@@ -94,17 +107,25 @@ func main() {
 		duration := float64(mpeg.SamplesPerFrame) / float64(samplerate)
 		mpg.SetAudioLeadTime(time.Duration(duration * float64(time.Second)))
 
+		// Audio is queued from the decode goroutine; SDL's audio stream is
+		// thread-safe.
 		mpg.SetAudioCallback(func(m *mpeg.MPEG, samples *mpeg.Samples) {
 			if samples == nil {
 				return
 			}
-
-			err = stream.PutData(samples.Bytes())
-			if err != nil {
+			if err := stream.PutData(samples.Bytes()); err != nil {
 				fmt.Println(err)
 			}
 		})
 	}
+
+	// Decode-ahead pipeline: the decoder runs on its own goroutine and passes
+	// CPU frame copies to the main thread, which owns all SDL rendering. This
+	// overlaps decoding the next frame with uploading and presenting (the vsync
+	// wait of) the current one.
+	ready := make(chan *frameBuf, 1)
+	free := make(chan *frameBuf, 3)
+	quit := make(chan struct{})
 
 	if hasVideo {
 		width := mpg.Width()
@@ -135,25 +156,98 @@ func main() {
 		}
 		defer texture.Destroy()
 
+		for i := 0; i < cap(free); i++ {
+			free <- &frameBuf{}
+		}
+
 		mpg.SetVideoCallback(func(m *mpeg.MPEG, frame *mpeg.Frame) {
 			if frame == nil {
 				return
 			}
 
-			err = texture.UpdateYUV(nil, frame.Y.Data, int32(frame.Y.Width), frame.Cb.Data, int32(frame.Cb.Width), frame.Cr.Data, int32(frame.Cr.Width))
-			if err != nil {
-				fmt.Println(err)
+			var fb *frameBuf
+			select {
+			case fb = <-free:
+			case <-quit:
+				return
+			}
+
+			fb.y = append(fb.y[:0], frame.Y.Data...)
+			fb.cb = append(fb.cb[:0], frame.Cb.Data...)
+			fb.cr = append(fb.cr[:0], frame.Cr.Data...)
+			fb.yStride = frame.Y.Width
+			fb.cStride = frame.Cb.Width
+
+			select {
+			case ready <- fb:
+			case <-quit:
 			}
 		})
 	}
 
-	var pause bool
-	var seekTo, lastTime, currentTime, elapsedTime float64
+	// Playback control shared with the decode goroutine. Seeks are relative so
+	// the main thread never touches the decoder.
+	var mu sync.Mutex
+	pause := false
+	seekDelta := 0.0
+	ended := false
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		last := time.Now()
+		for {
+			select {
+			case <-quit:
+				return
+			default:
+			}
+
+			mu.Lock()
+			p := pause
+			s := seekDelta
+			seekDelta = 0
+			mu.Unlock()
+
+			if s != 0 {
+				if hasAudio {
+					stream.Clear()
+				}
+				mpg.Seek(time.Duration((mpg.Time().Seconds()+s)*float64(time.Second)), false)
+				last = time.Now()
+				continue
+			}
+
+			if p {
+				last = time.Now()
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+
+			now := time.Now()
+			elapsed := now.Sub(last).Seconds()
+			last = now
+			if framerate > 0 && elapsed > 1.0/framerate {
+				elapsed = 1.0 / framerate
+			}
+
+			mpg.Decode(time.Duration(elapsed * float64(time.Second)))
+
+			if mpg.HasEnded() {
+				mu.Lock()
+				ended = true
+				mu.Unlock()
+				return
+			}
+
+			time.Sleep(time.Millisecond)
+		}
+	}()
 
 	running := true
 	for running {
-		seekTo = -1
-
 		var ev sdl.Event
 		for sdl.PollEvent(&ev) {
 			switch ev.Type {
@@ -161,65 +255,66 @@ func main() {
 				running = false
 			case sdl.EVENT_MOUSE_BUTTON_DOWN:
 				if ev.MouseButtonEvent().Clicks == 2 {
-					err = toggleFullscreen(renderer)
-					if err != nil {
+					if err := toggleFullscreen(renderer); err != nil {
 						fmt.Println(err)
 					}
 				}
 			case sdl.EVENT_KEY_DOWN:
-				if ev.KeyboardEvent().Key == sdl.K_ESCAPE || ev.KeyboardEvent().Key == sdl.K_Q {
+				switch ev.KeyboardEvent().Key {
+				case sdl.K_ESCAPE, sdl.K_Q:
 					running = false
-				} else if ev.KeyboardEvent().Key == sdl.K_SPACE || ev.KeyboardEvent().Key == sdl.K_P {
+				case sdl.K_SPACE, sdl.K_P:
+					mu.Lock()
 					pause = !pause
-				} else if ev.KeyboardEvent().Key == sdl.K_F || ev.KeyboardEvent().Key == sdl.K_F11 {
-					err = toggleFullscreen(renderer)
-					if err != nil {
+					mu.Unlock()
+				case sdl.K_F, sdl.K_F11:
+					if err := toggleFullscreen(renderer); err != nil {
 						fmt.Println(err)
 					}
-				} else if ev.KeyboardEvent().Key == sdl.K_RIGHT {
-					seekTo = mpg.Time().Seconds() + 3
-				} else if ev.KeyboardEvent().Key == sdl.K_LEFT {
-					seekTo = mpg.Time().Seconds() - 3
+				case sdl.K_RIGHT:
+					mu.Lock()
+					seekDelta = 3
+					mu.Unlock()
+				case sdl.K_LEFT:
+					mu.Lock()
+					seekDelta = -3
+					mu.Unlock()
 				}
 			}
 		}
 
-		if !pause {
-			currentTime = float64(sdl.Ticks()) / 1000
-			elapsedTime = currentTime - lastTime
-			if elapsedTime > 1.0/framerate {
-				elapsedTime = 1.0 / framerate
-			}
-			lastTime = currentTime
-
-			if seekTo != -1 {
-				if hasAudio {
-					stream.Clear()
+		if hasVideo {
+			// Upload the most recent decoded frame, if one is ready.
+			select {
+			case fb := <-ready:
+				if err := texture.UpdateYUV(nil, fb.y, int32(fb.yStride), fb.cb, int32(fb.cStride), fb.cr, int32(fb.cStride)); err != nil {
+					fmt.Println(err)
 				}
-				mpg.Seek(time.Duration(seekTo*float64(time.Second)), false)
-			} else {
-				mpg.Decode(time.Duration(elapsedTime * float64(time.Second)))
+				free <- fb
+			default:
 			}
+
+			if err := renderer.Clear(); err != nil {
+				fmt.Println(err)
+			}
+			if err := renderer.RenderTexture(texture, nil, nil); err != nil {
+				fmt.Println(err)
+			}
+			renderer.Present()
+		} else {
+			time.Sleep(time.Millisecond)
 		}
 
-		if mpg.HasEnded() {
+		mu.Lock()
+		e := ended
+		mu.Unlock()
+		if e && len(ready) == 0 {
 			running = false
 		}
-
-		if hasVideo && seekTo == -1 {
-			err = renderer.Clear()
-			if err != nil {
-				fmt.Println(err)
-			}
-
-			err = renderer.RenderTexture(texture, nil, nil)
-			if err != nil {
-				fmt.Println(err)
-			}
-
-			renderer.Present()
-		}
 	}
+
+	close(quit)
+	wg.Wait()
 }
 
 func openFile(arg string) (io.ReadSeekCloser, error) {
