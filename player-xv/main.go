@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jezek/xgb"
@@ -47,10 +48,11 @@ type app struct {
 	framerate  float64
 	samplerate int
 
-	pause   bool
-	running bool
-	visible bool
-	seekTo  float64
+	mu        sync.Mutex
+	pause     bool
+	running   bool
+	visible   bool
+	seekDelta float64
 
 	shmId  int
 	shmSeg mitshm.Seg
@@ -184,14 +186,17 @@ func newApp(m *mpeg.MPEG) (*app, error) {
 	if a.useXv {
 		atom := "XV_SYNC_TO_VBLANK"
 		reply, err := xproto.InternAtom(a.x, true, uint16(len(atom)), atom).Reply()
-		if err == nil {
+		if err == nil && reply.Atom != xproto.AtomNone {
 			xv.SetPortAttribute(a.x, a.xvPort, reply.Atom, 1)
 		}
 	}
 
 	if hasVideo {
 		a.mpg.SetVideoCallback(func(m *mpeg.MPEG, frame *mpeg.Frame) {
-			if frame == nil || !a.visible {
+			a.mu.Lock()
+			visible := a.visible
+			a.mu.Unlock()
+			if frame == nil || !visible {
 				return
 			}
 
@@ -263,19 +268,19 @@ func newApp(m *mpeg.MPEG) (*app, error) {
 
 	a.running = true
 
+	// Pump WaitForEvent inline so it never stalls; shared state is guarded by mu.
 	go func() {
 		for {
 			ev, err := a.x.WaitForEvent()
 			if err == nil && ev == nil {
+				a.mu.Lock()
 				a.running = false
+				a.mu.Unlock()
 				return
 			}
-
 			if err != nil {
 				log.Printf("Error: %s\n", err)
-			}
-			if ev != nil {
-				//log.Printf("Event: %v\n", ev)
+				continue
 			}
 
 			a.processEvent(ev)
@@ -285,55 +290,81 @@ func newApp(m *mpeg.MPEG) (*app, error) {
 	return a, nil
 }
 
+// processEvent runs on the event goroutine, so it guards shared state with mu.
 func (a *app) processEvent(ev xgb.Event) {
 	switch e := ev.(type) {
 	case xproto.DestroyNotifyEvent:
+		a.mu.Lock()
 		a.running = false
+		a.mu.Unlock()
 	case xproto.ConfigureNotifyEvent:
+		a.mu.Lock()
 		a.scaledWidth = int(e.Width)
 		a.scaledHeight = int(e.Height)
+		a.mu.Unlock()
 	case xproto.ExposeEvent:
 		a.putImage()
 	case xproto.VisibilityNotifyEvent:
-		vne := ev.(xproto.VisibilityNotifyEvent)
-		a.visible = vne.State != xproto.VisibilityFullyObscured
+		a.mu.Lock()
+		a.visible = e.State != xproto.VisibilityFullyObscured
+		a.mu.Unlock()
 	case xproto.KeyPressEvent:
-		kpe := ev.(xproto.KeyPressEvent)
 		switch {
-		case kpe.Detail == 24 || kpe.Detail == 9: // q, escape
+		case e.Detail == 24 || e.Detail == 9: // q, escape
+			a.mu.Lock()
 			a.running = false
-		case kpe.Detail == 65 || kpe.Detail == 33: // space, p
+			a.mu.Unlock()
+		case e.Detail == 65 || e.Detail == 33: // space, p
+			a.mu.Lock()
 			a.pause = !a.pause
-		case kpe.Detail == 41 || kpe.Detail == 95: // f, f11
+			a.mu.Unlock()
+		case e.Detail == 41 || e.Detail == 95: // f, f11
 			_ = ewmh.WmStateReq(a.xu, a.window, ewmh.StateToggle, "_NET_WM_STATE_FULLSCREEN")
-		case kpe.Detail == 114: // right
-			a.seekTo = a.mpg.Time().Seconds() + 3
-		case kpe.Detail == 113: // left
-			a.seekTo = a.mpg.Time().Seconds() - 3
+		case e.Detail == 114: // right
+			a.mu.Lock()
+			a.seekDelta += 3
+			a.mu.Unlock()
+		case e.Detail == 113: // left
+			a.mu.Lock()
+			a.seekDelta -= 3
+			a.mu.Unlock()
 		}
 	}
 }
 
 func (a *app) run() {
-	var now, ideal int64
-	var lastTime, currentTime, elapsedTime float64
+	// Poll at ~60 Hz so audio stays fed between frames; ideal avoids drift.
+	const tick = 16 * time.Millisecond
 
-	ideal = time.Now().UnixMilli()
+	ideal := time.Now()
+	var last time.Time
 
-	for a.running {
-		if !a.pause {
-			currentTime = float64(time.Now().UnixMilli()) / 1000
-			elapsedTime = currentTime - lastTime
-			if elapsedTime > 1.0/a.framerate {
-				elapsedTime = 1.0 / a.framerate
+	for {
+		a.mu.Lock()
+		running := a.running
+		pause := a.pause
+		seek := a.seekDelta
+		if !pause {
+			a.seekDelta = 0
+		}
+		a.mu.Unlock()
+
+		if !running {
+			return
+		}
+
+		if !pause {
+			now := time.Now()
+			elapsed := now.Sub(last).Seconds()
+			if a.framerate > 0 && elapsed > 1.0/a.framerate {
+				elapsed = 1.0 / a.framerate
 			}
-			lastTime = currentTime
+			last = now
 
-			if a.seekTo != -1 {
-				a.mpg.Seek(time.Duration(a.seekTo*float64(time.Second)), false)
-				a.seekTo = -1
+			if seek != 0 {
+				a.mpg.Seek(time.Duration((a.mpg.Time().Seconds()+seek)*float64(time.Second)), false)
 			} else {
-				a.mpg.Decode(time.Duration(elapsedTime * float64(time.Second)))
+				a.mpg.Decode(time.Duration(elapsed * float64(time.Second)))
 			}
 		}
 
@@ -341,10 +372,9 @@ func (a *app) run() {
 			return
 		}
 
-		ideal += 17
-		now = time.Now().UnixMilli()
-		if now < ideal {
-			time.Sleep(time.Duration(ideal-now) * time.Millisecond)
+		ideal = ideal.Add(tick)
+		if d := time.Until(ideal); d > 0 {
+			time.Sleep(d)
 		}
 	}
 }
@@ -435,9 +465,13 @@ func (a *app) destroyImage() error {
 }
 
 func (a *app) putImage() {
+	a.mu.Lock()
+	scaledWidth, scaledHeight := a.scaledWidth, a.scaledHeight
+	a.mu.Unlock()
+
 	if a.useXv {
 		err := xv.ShmPutImageChecked(a.x, a.xvPort, xproto.Drawable(a.window), a.gc, a.shmSeg, a.formatID, 0, 0, 0,
-			uint16(a.width), uint16(a.height), 0, 0, uint16(a.scaledWidth), uint16(a.scaledHeight), uint16(a.width), uint16(a.height), 0).Check()
+			uint16(a.width), uint16(a.height), 0, 0, uint16(scaledWidth), uint16(scaledHeight), uint16(a.width), uint16(a.height), 0).Check()
 		if err != nil {
 			log.Println(err)
 		}
